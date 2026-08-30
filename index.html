@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strip Map — Offline Road Trip Planner</title>
+<meta name="description" content="Free offline road-trip strip map. Add your start, stops and destination with notes, times and tips. No account, no ads, works without signal.">
+<meta property="og:title" content="Strip Map — Offline Road Trip Planner">
+<meta property="og:description" content="Plan your stops, save notes and tips, track progress. One file, fully offline.">
+<style>
+  :root{
+    --paper:#E9EDE3;
+    --paper-deep:#DDE3D6;
+    --ink:#22304A;
+    --ink-soft:#4A5A78;
+    --highway:#C43B2E;
+    --gold:#E0A526;
+    --park:#4A7C59;
+    --card:#F7F8F3;
+    --border-line:#B8C2AE;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Avenir Next","Segoe UI",Helvetica,Arial,sans-serif;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(34,48,74,0.045) 39px, rgba(34,48,74,0.045) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(34,48,74,0.045) 39px, rgba(34,48,74,0.045) 40px);
+  }
+  .wrap{max-width:520px;margin:0 auto;padding:0 0 140px}
+
+  /* ---------- Header ---------- */
+  header{
+    background:var(--ink); color:var(--paper);
+    padding:20px 20px 18px; position:relative; overflow:hidden;
+  }
+  header::after{
+    content:""; position:absolute; left:0; right:0; bottom:0; height:6px;
+    background:repeating-linear-gradient(90deg, var(--gold) 0 28px, transparent 28px 44px);
+  }
+  .hdr-top{display:flex;align-items:center;gap:14px}
+  .shield{flex:0 0 auto}
+  .eyebrow{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--gold);margin-bottom:4px;font-weight:600}
+  h1{font-family:Georgia,"Times New Roman",serif;font-size:22px;line-height:1.15;font-weight:700;word-break:break-word}
+  .hdr-sub{margin-top:8px;font-size:12.5px;color:#B9C4DA}
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{
+    background:var(--card); border-bottom:1px solid var(--border-line);
+    padding:10px 16px; display:flex; align-items:center; gap:10px;
+    position:sticky; top:0; z-index:20;
+  }
+  .prog-track{flex:1;height:8px;background:var(--paper-deep);border-radius:99px;overflow:hidden}
+  .prog-fill{height:100%;width:0%;background:var(--highway);border-radius:99px;transition:width .45s cubic-bezier(.2,.8,.2,1)}
+  .prog-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--ink-soft);white-space:nowrap}
+  .btn-mode{
+    font:inherit;border:0;cursor:pointer;border-radius:9px;
+    padding:8px 13px;font-weight:700;font-size:12.5px;
+    background:var(--ink);color:var(--paper);white-space:nowrap;
+  }
+  .btn-mode.editing{background:var(--highway)}
+
+  /* ---------- Map ---------- */
+  .mapbox{padding:8px 6px 0;position:relative}
+  svg{display:block;width:100%;height:auto}
+  .compass{position:absolute;top:20px;right:18px;font-size:10px;letter-spacing:.2em;color:var(--ink-soft);text-align:center;font-weight:700}
+  .compass .arrow{font-size:18px;display:block;line-height:1}
+  .stop-hit{cursor:pointer}
+  .stop-hit circle.ring{transition:r .2s ease, stroke-width .2s ease}
+  .stop-hit.active circle.ring{stroke-width:3}
+
+  .empty{
+    margin:40px 24px;text-align:center;color:var(--ink-soft);
+    font-size:14.5px;line-height:1.6;
+  }
+  .empty b{color:var(--ink)}
+
+  /* ---------- Editor panel ---------- */
+  .editor{display:none;padding:14px 16px 4px}
+  .editor.on{display:block}
+  .ed-card{
+    background:var(--card);border:1px solid var(--border-line);border-radius:14px;
+    padding:14px;margin-bottom:12px;
+  }
+  .ed-card h3{font-family:Georgia,serif;font-size:15px;margin-bottom:10px}
+  label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin:10px 0 4px}
+  input[type=text], textarea, select{
+    width:100%;font:inherit;font-size:14px;padding:9px 11px;
+    border:1.5px solid var(--border-line);border-radius:9px;background:#fff;color:var(--ink);
+  }
+  input:focus, textarea:focus, select:focus{outline:2px solid var(--ink);outline-offset:1px}
+  textarea{resize:vertical;min-height:56px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .btn{
+    font:inherit;border:0;cursor:pointer;border-radius:10px;
+    padding:11px 16px;font-weight:700;font-size:14px;
+  }
+  .btn-add{width:100%;margin-top:12px;background:var(--park);color:#fff}
+  .btn-ghost{background:var(--paper-deep);color:var(--ink)}
+  .btn-danger{background:#fff;color:var(--highway);border:1.5px solid var(--highway)}
+
+  /* stop list rows */
+  .stop-row{
+    display:flex;align-items:center;gap:8px;
+    background:var(--card);border:1px solid var(--border-line);border-radius:12px;
+    padding:9px 10px;margin-bottom:8px;
+  }
+  .stop-row .dotk{flex:0 0 12px;height:12px;border-radius:50%}
+  .stop-row .nm{flex:1;font-size:13.5px;font-weight:600;line-height:1.25;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .stop-row .tm{font-size:11px;color:var(--ink-soft);font-weight:600;white-space:nowrap}
+  .icon-btn{
+    flex:0 0 32px;height:32px;border:0;border-radius:8px;cursor:pointer;
+    background:var(--paper-deep);color:var(--ink);font-size:15px;font-weight:800;line-height:1;
+  }
+  .icon-btn:disabled{opacity:.3;cursor:default}
+  .icon-btn.del{color:var(--highway)}
+
+  .io-row{display:flex;gap:10px;margin-top:4px}
+  .io-row .btn{flex:1;font-size:13px}
+  .io-area{margin-top:10px;display:none}
+  .io-area.on{display:block}
+  .io-area textarea{min-height:90px;font-size:11.5px;font-family:monospace}
+  .io-note{font-size:11.5px;color:var(--ink-soft);margin-top:6px;line-height:1.45}
+  .save-note{font-size:11px;color:var(--park);font-weight:700;margin-top:8px;display:none}
+  .save-note.on{display:block}
+
+  /* ---------- Detail sheet ---------- */
+  .sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:40;
+    max-width:520px;margin:0 auto;background:var(--card);
+    border-top:3px solid var(--ink);border-radius:18px 18px 0 0;
+    box-shadow:0 -12px 40px rgba(34,48,74,.25);
+    transform:translateY(105%);transition:transform .35s cubic-bezier(.2,.8,.2,1);
+    padding:16px 20px 26px;max-height:80vh;overflow:auto;
+  }
+  .sheet.open{transform:translateY(0)}
+  .sheet-handle{width:44px;height:4px;border-radius:99px;background:var(--border-line);margin:0 auto 12px}
+  .sheet-head{display:flex;align-items:flex-start;gap:12px}
+  .badge{flex:0 0 34px;height:34px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;font-family:Georgia,serif}
+  .sheet h2{font-family:Georgia,serif;font-size:19px;line-height:1.15;word-break:break-word}
+  .sheet .meta{font-size:12px;color:var(--ink-soft);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap;font-weight:600}
+  .sheet p.note{margin-top:12px;font-size:14.5px;line-height:1.55;color:#33415E;white-space:pre-wrap}
+  .tip{margin-top:12px;padding:10px 12px;border-left:3px solid var(--gold);background:rgba(224,165,38,.09);font-size:13px;line-height:1.5;color:#5A4A18;border-radius:0 8px 8px 0;white-space:pre-wrap}
+  .tip:empty{display:none}
+  .sheet-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+  .btn-visit{flex:1;background:var(--ink);color:var(--paper)}
+  .btn-visit.done{background:var(--park);color:#fff}
+  .scrim{position:fixed;inset:0;background:rgba(34,48,74,.28);opacity:0;pointer-events:none;transition:opacity .3s;z-index:30}
+  .scrim.on{opacity:1;pointer-events:auto}
+
+  .legend{margin:6px 20px 0;padding:12px 14px;background:var(--card);border:1px solid var(--border-line);border-radius:12px;display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-soft);font-weight:600}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .swatch{width:12px;height:12px;border-radius:50%;display:inline-block}
+  .foot{margin:14px 20px 0;font-size:11px;color:var(--ink-soft);text-align:center;letter-spacing:.06em}
+
+  @media (prefers-reduced-motion: reduce){
+    .prog-fill,.sheet,.scrim,.stop-hit circle.ring{transition:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="hdr-top">
+      <svg class="shield" width="48" height="48" viewBox="0 0 100 100" aria-hidden="true">
+        <path d="M50 4 C63 12 80 15 94 14 C96 48 88 78 50 96 C12 78 4 48 6 14 C20 15 37 12 50 4 Z" fill="#0F1E3D" stroke="#fff" stroke-width="4"/>
+        <path d="M50 8 C62 15 77 18 90 17.5 C91.5 47 84 74 50 91 C16 74 8.5 47 10 17.5 C23 18 38 15 50 8 Z" fill="#B4302A"/>
+        <path d="M12 34 L88 34 L88 60 L12 60 Z" fill="#0F1E3D"/>
+        <text x="50" y="56" text-anchor="middle" fill="#fff" font-size="24" font-weight="bold" font-family="Arial">MAP</text>
+      </svg>
+      <div style="min-width:0">
+        <div class="eyebrow">Strip Map · Builder</div>
+        <h1 id="hdrTitle">My Road Trip</h1>
+      </div>
+    </div>
+    <div class="hdr-sub" id="hdrSub"></div>
+  </header>
+
+  <div class="toolbar">
+    <div class="prog-label" id="progLabel">0 of 0</div>
+    <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    <button class="btn-mode" id="btnMode">✎ Edit trip</button>
+  </div>
+
+  <!-- ================= EDITOR ================= -->
+  <div class="editor" id="editor">
+
+    <div class="ed-card">
+      <h3>Trip details</h3>
+      <label for="tripTitle">Trip name</label>
+      <input type="text" id="tripTitle" placeholder="e.g. Lethbridge → Idaho Falls">
+      <label for="tripSub">Subtitle (date, distance…)</label>
+      <input type="text" id="tripSub" placeholder="e.g. Sat Sept 5 · ~740 km · 7½ hrs">
+      <label for="tripLayout">Map layout</label>
+      <select id="tripLayout">
+        <option value="auto">Order — even serpentine (no coordinates needed)</option>
+        <option value="geo">Geographic — plot by latitude/longitude</option>
+      </select>
+      <div class="io-note">Geographic mode uses each stop's lat/lon. In Google Maps, press-and-hold any spot to see its coordinates. Stops without coordinates are placed between their neighbours.</div>
+    </div>
+
+    <div class="ed-card">
+      <h3>Add a stop</h3>
+      <label for="fName">Name *</label>
+      <input type="text" id="fName" placeholder="e.g. Helena — Great Northern Carousel">
+      <div class="row2">
+        <div>
+          <label for="fTime">Arrival time</label>
+          <input type="text" id="fTime" placeholder="11:15 AM">
+        </div>
+        <div>
+          <label for="fKind">Type</label>
+          <select id="fKind">
+            <option value="stop">Stop</option>
+            <option value="origin">Start</option>
+            <option value="dest">End / Destination</option>
+            <option value="border">Border crossing</option>
+          </select>
+        </div>
+      </div>
+      <label for="fDist">Distance / leg label</label>
+      <input type="text" id="fDist" placeholder="e.g. 145 km from Great Falls">
+      <div class="row2">
+        <div>
+          <label for="fLat">Latitude (optional)</label>
+          <input type="text" id="fLat" inputmode="decimal" placeholder="46.598">
+        </div>
+        <div>
+          <label for="fLon">Longitude (optional)</label>
+          <input type="text" id="fLon" inputmode="decimal" placeholder="-112.037">
+        </div>
+      </div>
+      <label for="fNote">What's here?</label>
+      <textarea id="fNote" placeholder="Carousel rides, pizza and ice cream under one roof…"></textarea>
+      <label for="fTip">Tip (optional)</label>
+      <textarea id="fTip" placeholder="Opens 10 AM Saturdays. Only 2 min off the interstate."></textarea>
+      <button class="btn btn-add" id="btnAdd">+ Add stop to route</button>
+    </div>
+
+    <div class="ed-card">
+      <h3>Route order <span style="font-weight:400;font-size:12px;color:var(--ink-soft)">(top = first)</span></h3>
+      <div id="stopList"></div>
+      <div class="io-note">Use ▲▼ to reorder. Tap a name to load it into the form above for editing, then "Add" saves it back.</div>
+    </div>
+
+    <div class="ed-card">
+      <h3>Backup</h3>
+      <div class="io-row">
+        <button class="btn btn-ghost" id="btnExport">Export</button>
+        <button class="btn btn-ghost" id="btnImport">Import</button>
+        <button class="btn btn-danger" id="btnClear">Clear all</button>
+      </div>
+      <div class="io-row" style="margin-top:8px">
+        <button class="btn btn-ghost" id="btnSample">Load sample trip</button>
+      </div>
+      <div class="io-area" id="ioArea">
+        <textarea id="ioText" placeholder="Trip data appears here / paste here"></textarea>
+        <button class="btn btn-ghost" id="btnIoGo" style="width:100%;margin-top:8px">Load pasted trip</button>
+      </div>
+      <div class="io-note">Export copies your whole trip as text — save it in Notes. Import pastes it back on any device. No internet needed.</div>
+      <div class="save-note" id="saveNote">✓ Saved</div>
+    </div>
+  </div>
+
+  <!-- ================= MAP ================= -->
+  <div class="mapbox" id="mapbox">
+    <div class="compass"><span class="arrow">↑</span>Start</div>
+    <svg id="map" role="img" aria-label="Route strip map"></svg>
+  </div>
+  <div class="empty" id="empty" style="display:none">
+    <b>No stops yet.</b><br>Tap <b>✎ Edit trip</b> above and add your start point, stops, and destination — the map draws itself.
+  </div>
+
+  <div class="legend">
+    <span><i class="swatch" style="background:#22304A"></i>Start</span>
+    <span><i class="swatch" style="background:#C43B2E"></i>Stop</span>
+    <span><i class="swatch" style="background:#4A7C59"></i>Destination</span>
+    <span><i class="swatch" style="background:#E0A526"></i>Border</span>
+  </div>
+  <div class="foot">TAP ANY STOP FOR DETAILS · SAVES IN YOUR BROWSER · WORKS WITHOUT SIGNAL ONCE LOADED<br><span style="opacity:.7">Free · no account · no tracking · Made by Sekhar Dahal</span></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <div class="badge" id="sheetBadge">1</div>
+    <div>
+      <h2 id="sheetTitle">Stop</h2>
+      <div class="meta"><span id="sheetTime"></span><span id="sheetDist"></span></div>
+    </div>
+  </div>
+  <p class="note" id="sheetNote"></p>
+  <div class="tip" id="sheetTip"></div>
+  <div class="sheet-actions">
+    <button class="btn btn-visit" id="btnVisit">Mark as reached</button>
+    <button class="btn btn-ghost" id="btnClose">Close</button>
+  </div>
+</div>
+
+<script>
+/* ================= state ================= */
+const DEFAULT_TRIP = {
+  title:"Sample: Lethbridge → Idaho Falls",
+  layout:"geo",
+  sub:"Sat, Sept 5 · 6:00 AM depart · ~740 km · 7½ hrs",
+  stops:[
+    {name:"Lethbridge, AB", kind:"origin", lat:49.694, lon:-112.833, time:"6:00 AM", dist:"Departure",
+     note:"Overnight base. Roll out at 6 AM — it's dark until about 6:50, and Highway 4 to Coutts is open prairie.",
+     tip:"Watch for deer in the low light on Hwy 4. Coffee up — first stop is almost 2 hours away."},
+    {name:"Coutts / Sweet Grass Border", kind:"border", lat:49.001, lon:-111.958, time:"7:15 AM", dist:"105 km from Lethbridge",
+     note:"24-hour crossing. Early Saturday morning should mean little to no wait.",
+     tip:"Passports out and ready. If travelling with kids without both parents, carry a consent letter."},
+    {name:"Shelby, MT — Carousel Rest Area", kind:"stop", lat:48.511, lon:-111.87, time:"7:45 AM", dist:"56 km from border",
+     note:"Quick bathroom-and-stretch stop 30 minutes past the border. Quirky rest area with a vintage carousel.",
+     tip:"Hungry crew? Shelby has diners for breakfast — or hold out 90 minutes for Great Falls."},
+    {name:"Great Falls, MT — Giant Springs", kind:"stop", lat:47.534, lon:-111.229, time:"9:15 AM", dist:"137 km from Shelby",
+     note:"The big morning leg-stretch. Huge freshwater springs, the world's shortest river, and a fish hatchery where kids can feed trout.",
+     tip:"~15 min off I-15 each way. Worth it for a 30–45 min stop; skip if you only need a bathroom."},
+    {name:"Helena, MT — Great Northern Carousel", kind:"stop", lat:46.598, lon:-112.037, time:"11:15 AM", dist:"145 km from Great Falls",
+     note:"Main midday stop, ~2 minutes off the interstate. Hand-carved carousel ($3 rides) with pizza and ice cream under one roof.",
+     tip:"Opens 10 AM Saturdays. Aim to be rolling again by ~12:30."},
+    {name:"Butte, MT", kind:"stop", lat:45.987, lon:-112.507, time:"1:45 PM", dist:"103 km from Helena",
+     note:"Optional short stop — Hanging Five is a well-loved cheap family diner. Otherwise quick fuel and bathroom.",
+     tip:"Top up snacks and water before the emptier southern half."},
+    {name:"Clark Canyon Reservoir", kind:"stop", lat:44.965, lon:-112.864, time:"3:00 PM", dist:"117 km from Butte",
+     note:"Last stretch break before Monida Pass — reservoir views, Lewis & Clark history, vault toilets right off I-15.",
+     tip:"Fuel up in Dillon just before this stop. Services are very sparse for the next 2 hours."},
+    {name:"Idaho Falls, ID — Snake River Greenbelt", kind:"dest", lat:43.488, lon:-112.047, time:"5:00 PM", dist:"180 km from Clark Canyon",
+     note:"You made it! Walk the riverfront, see the falls that named the city, let the kids burn off car energy before dinner.",
+     tip:"Arriving by 5 leaves a full relaxed evening — dinner, riverwalk, normal bedtime."}
+  ]
+};
+
+let trip = JSON.parse(JSON.stringify(DEFAULT_TRIP));
+let visited = new Set();
+let editIndex = -1;   // which stop is loaded in the form
+let current = -1;     // sheet
+
+const KIND_COLOR = {origin:'#22304A', border:'#E0A526', stop:'#C43B2E', dest:'#4A7C59'};
+const $ = id => document.getElementById(id);
+
+/* ================= persistence (best-effort) ================= */
+function flashSaved(){
+  const n = $('saveNote'); n.classList.add('on');
+  setTimeout(()=>n.classList.remove('on'), 1500);
+}
+async function saveTrip(){
+  const data = JSON.stringify(trip);
+  try{
+    if(typeof window.storage !== 'undefined'){        // running inside Claude
+      await window.storage.set('trip-map-data', data);
+      flashSaved(); return;
+    }
+  }catch(e){}
+  try{
+    localStorage.setItem('trip-map-data', data);       // normal browser
+    flashSaved();
+  }catch(e){ /* private mode etc — export/import still works */ }
+}
+async function loadTrip(){
+  try{
+    if(typeof window.storage !== 'undefined'){
+      const r = await window.storage.get('trip-map-data');
+      if(r && r.value){ const t=JSON.parse(r.value); if(t&&Array.isArray(t.stops)){trip=t;return;} }
+    }
+  }catch(e){}
+  try{
+    const raw = localStorage.getItem('trip-map-data');
+    if(raw){ const t=JSON.parse(raw); if(t&&Array.isArray(t.stops)) trip=t; }
+  }catch(e){}
+}
+
+/* ================= map render ================= */
+function badgeChar(i, n, kind){
+  if(kind==='origin') return 'A';
+  if(kind==='dest') return 'B';
+  return String(i);
+}
+function render(){
+  $('hdrTitle').textContent = trip.title || 'My Road Trip';
+  $('hdrSub').textContent = trip.sub || '';
+  const svg = $('map');
+  svg.innerHTML = '';
+  const stops = trip.stops;
+  $('empty').style.display = stops.length ? 'none' : 'block';
+  $('mapbox').style.display = stops.length ? 'block' : 'none';
+  paintProgress();
+  if(!stops.length) return;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const W = 520;
+  const perStop = 128;
+  const H = Math.max(300, 90 + stops.length * perStop);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  function el(tag, attrs, parent){
+    const e = document.createElementNS(NS, tag);
+    for(const k in attrs) e.setAttribute(k, attrs[k]);
+    (parent||svg).appendChild(e); return e;
+  }
+
+  /* ---- positions: geographic (lat/lon) or serpentine (order) ---- */
+  const hasCoord = s => typeof s.lat==='number' && typeof s.lon==='number' && isFinite(s.lat) && isFinite(s.lon);
+  const coordCount = stops.filter(hasCoord).length;
+  const geoMode = trip.layout==='geo' && coordCount>=2;
+
+  let P;
+  if(geoMode){
+    const cs = stops.filter(hasCoord);
+    let latMax=Math.max(...cs.map(s=>s.lat)), latMin=Math.min(...cs.map(s=>s.lat));
+    let lonMax=Math.max(...cs.map(s=>s.lon)), lonMin=Math.min(...cs.map(s=>s.lon));
+    if(latMax===latMin){latMax+=0.01;latMin-=0.01}
+    if(lonMax===lonMin){lonMax+=0.01;lonMin-=0.01}
+    const PX=125, PT=70, PB=70;
+    P = stops.map(s=>{
+      if(!hasCoord(s)) return null;
+      return {
+        x: PX + ((s.lon-lonMin)/(lonMax-lonMin))*(W-PX*2),
+        y: PT + ((latMax-s.lat)/(latMax-latMin))*(H-PT-PB)
+      };
+    });
+    /* interpolate stops without coordinates between nearest placed neighbours */
+    for(let i=0;i<P.length;i++){
+      if(P[i]) continue;
+      let a=i-1; while(a>=0 && !P[a]) a--;
+      let b=i+1; while(b<P.length && !P[b]) b++;
+      if(a>=0 && b<P.length){
+        const t=(i-a)/(b-a);
+        P[i]={x:P[a].x+(P[b].x-P[a].x)*t, y:P[a].y+(P[b].y-P[a].y)*t};
+      }else if(a>=0){ P[i]={x:P[a].x, y:P[a].y+70*(i-a)}; }
+      else if(b<P.length){ P[i]={x:P[b].x, y:P[b].y-70*(b-i)}; }
+      else{ P[i]={x:W/2,y:70+i*100}; }
+    }
+  }else{
+    P = stops.map((s,i)=>{
+      const y = 70 + i * ((H-140) / Math.max(1, stops.length-1));
+      const amp = stops.length > 1 ? 92 : 0;
+      const x = W/2 + (i%2===0 ? -amp : amp) * (stops.length>2 ? 1 : 0.4);
+      return {x,y};
+    });
+  }
+
+  /* faint terrain doodles */
+  for(let i=0;i<Math.min(6, stops.length);i++){
+    const y = 130 + i*(H-200)/Math.max(1,Math.min(6,stops.length));
+    el('path',{d:`M22 ${y} l16 -20 l12 14 l14 -18 l12 16`, fill:'none', stroke:'#B8C2AE','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round',opacity:.7});
+  }
+
+  /* route */
+  if(P.length > 1){
+    let d = `M ${P[0].x} ${P[0].y}`;
+    for(let i=1;i<P.length;i++){
+      const a=P[i-1], b=P[i];
+      d += ` C ${a.x} ${(a.y+b.y)/2}, ${b.x} ${(a.y+b.y)/2}, ${b.x} ${b.y}`;
+    }
+    el('path',{d, fill:'none', stroke:'#22304A','stroke-width':9,'stroke-linecap':'round'});
+    el('path',{d, fill:'none', stroke:'#C43B2E','stroke-width':5,'stroke-linecap':'round'});
+    el('path',{d, fill:'none', stroke:'#F7F8F3','stroke-width':1.6,'stroke-dasharray':'12 14','stroke-linecap':'round',opacity:.9});
+  }
+
+  /* border dashed lines for any border stops */
+  stops.forEach((s,i)=>{
+    if(s.kind==='border'){
+      el('line',{x1:16,y1:P[i].y,x2:W-16,y2:P[i].y,stroke:'#E0A526','stroke-width':2,'stroke-dasharray':'10 7',opacity:.85});
+    }
+  });
+
+  /* leg labels between stops (uses each stop's dist text, shortened) */
+  for(let i=1;i<P.length;i++){
+    const dtxt = (stops[i].dist||'').split(' from')[0].trim();
+    if(!dtxt || dtxt.length>18) continue;
+    const a=P[i-1], b=P[i];
+    const x=(a.x+b.x)/2, y=(a.y+b.y)/2;
+    const left = x < W/2;
+    el('text',{x:left? x-20 : x+20, y:y+4, fill:'#4A5A78','font-size':11,'font-weight':'600','font-style':'italic','text-anchor':left?'end':'start'}).textContent=dtxt;
+  }
+
+  /* markers */
+  window._hits = [];
+  stops.forEach((s,i)=>{
+    const p=P[i];
+    const g=el('g',{class:'stop-hit', tabindex:0, role:'button','aria-label':s.name});
+    el('circle',{cx:p.x,cy:p.y,r:24,fill:'transparent'},g);
+    const ring = el('circle',{class:'ring',cx:p.x,cy:p.y,r:13,fill:KIND_COLOR[s.kind]||KIND_COLOR.stop,stroke: visited.has(i)?'#4A7C59':'#F7F8F3','stroke-width': visited.has(i)?4:2.5},g);
+    el('text',{x:p.x,y:p.y+4.5,'text-anchor':'middle',fill:'#fff','font-size':12,'font-weight':'800','font-family':'Georgia,serif'},g).textContent=badgeChar(i, stops.length, s.kind);
+    const onLeft = p.x > W/2;
+    const lx = onLeft ? p.x-30 : p.x+30;
+    const nm = s.name.split('—')[0].trim();
+    el('text',{x:lx,y:p.y-2,'text-anchor':onLeft?'end':'start',fill:'#22304A','font-size':14,'font-weight':'700','font-family':'Georgia,serif'},g).textContent = nm.length>26 ? nm.slice(0,25)+'…' : nm;
+    if(s.time) el('text',{x:lx,y:p.y+15,'text-anchor':onLeft?'end':'start',fill:'#4A5A78','font-size':11,'font-weight':'600'},g).textContent=s.time;
+    g.addEventListener('click',()=>openSheet(i));
+    g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openSheet(i);}});
+    window._hits.push(g);
+  });
+
+  renderStopList();
+}
+
+/* ================= editor ================= */
+function renderStopList(){
+  const box = $('stopList');
+  box.innerHTML = '';
+  trip.stops.forEach((s,i)=>{
+    const row = document.createElement('div');
+    row.className = 'stop-row';
+    row.innerHTML = `
+      <span class="dotk" style="background:${KIND_COLOR[s.kind]||KIND_COLOR.stop}"></span>
+      <span class="nm" data-act="edit">${escapeHtml(s.name)}</span>
+      <span class="tm">${escapeHtml(s.time||'')}</span>
+      <button class="icon-btn" data-act="up" ${i===0?'disabled':''} aria-label="Move up">▲</button>
+      <button class="icon-btn" data-act="down" ${i===trip.stops.length-1?'disabled':''} aria-label="Move down">▼</button>
+      <button class="icon-btn del" data-act="del" aria-label="Delete">✕</button>`;
+    row.addEventListener('click', e=>{
+      const act = e.target.getAttribute('data-act');
+      if(!act) return;
+      if(act==='up' && i>0){ swap(i,i-1); }
+      else if(act==='down' && i<trip.stops.length-1){ swap(i,i+1); }
+      else if(act==='del'){ trip.stops.splice(i,1); visited=new Set(); afterChange(); }
+      else if(act==='edit'){ loadIntoForm(i); }
+    });
+    box.appendChild(row);
+  });
+  if(!trip.stops.length){
+    box.innerHTML = '<div class="io-note">No stops yet — add your starting point above.</div>';
+  }
+}
+function swap(a,b){
+  [trip.stops[a],trip.stops[b]]=[trip.stops[b],trip.stops[a]];
+  visited=new Set(); afterChange();
+}
+function loadIntoForm(i){
+  const s=trip.stops[i];
+  $('fName').value=s.name; $('fTime').value=s.time||'';
+  $('fKind').value=s.kind||'stop'; $('fDist').value=s.dist||'';
+  $('fNote').value=s.note||''; $('fTip').value=s.tip||'';
+  $('fLat').value = (typeof s.lat==='number') ? s.lat : '';
+  $('fLon').value = (typeof s.lon==='number') ? s.lon : '';
+  editIndex=i;
+  $('btnAdd').textContent='✓ Save changes to "'+ (s.name.length>18? s.name.slice(0,17)+'…' : s.name) +'"';
+  $('fName').scrollIntoView({behavior:'smooth',block:'center'});
+}
+function clearForm(){
+  ['fName','fTime','fDist','fNote','fTip','fLat','fLon'].forEach(id=>$(id).value='');
+  $('fKind').value='stop';
+  editIndex=-1;
+  $('btnAdd').textContent='+ Add stop to route';
+}
+$('btnAdd').addEventListener('click', ()=>{
+  const name=$('fName').value.trim();
+  if(!name){ $('fName').focus(); return; }
+  const s={name, time:$('fTime').value.trim(), kind:$('fKind').value,
+           dist:$('fDist').value.trim(), note:$('fNote').value.trim(), tip:$('fTip').value.trim()};
+  const la=parseFloat($('fLat').value), lo=parseFloat($('fLon').value);
+  if(isFinite(la) && isFinite(lo)){ s.lat=la; s.lon=lo; }
+  if(editIndex>=0){ trip.stops[editIndex]=s; }
+  else{
+    // sensible auto-placement: origins go first, destinations last, stops before any destination
+    if(s.kind==='origin') trip.stops.unshift(s);
+    else if(s.kind==='dest') trip.stops.push(s);
+    else{
+      const di = trip.stops.findIndex(x=>x.kind==='dest');
+      di>=0 ? trip.stops.splice(di,0,s) : trip.stops.push(s);
+    }
+  }
+  visited=new Set();
+  clearForm(); afterChange();
+});
+$('tripTitle').addEventListener('input', e=>{ trip.title=e.target.value; $('hdrTitle').textContent=trip.title||'My Road Trip'; saveTrip(); });
+$('tripSub').addEventListener('input', e=>{ trip.sub=e.target.value; $('hdrSub').textContent=trip.sub; saveTrip(); });
+$('tripLayout').addEventListener('change', e=>{ trip.layout=e.target.value; afterChange(); });
+
+$('btnSample').addEventListener('click', ()=>{
+  if(trip.stops.length && !confirm('Replace your current trip with the sample?')) return;
+  trip=JSON.parse(JSON.stringify(DEFAULT_TRIP));
+  visited=new Set(); clearForm(); syncTripFields(); afterChange();
+});
+$('btnClear').addEventListener('click', ()=>{
+  if(!confirm('Remove every stop and start a blank trip?')) return;
+  trip={title:'My Road Trip',sub:'',stops:[]};
+  visited=new Set(); clearForm(); syncTripFields(); afterChange();
+});
+
+/* export / import */
+$('btnExport').addEventListener('click', ()=>{
+  $('ioArea').classList.add('on');
+  $('ioText').value = JSON.stringify(trip, null, 1);
+  $('ioText').select();
+  try{ document.execCommand('copy'); }catch(e){}
+});
+$('btnImport').addEventListener('click', ()=>{
+  $('ioArea').classList.add('on');
+  $('ioText').value='';
+  $('ioText').placeholder='Paste your exported trip here, then tap "Load pasted trip"';
+  $('ioText').focus();
+});
+$('btnIoGo').addEventListener('click', ()=>{
+  try{
+    const t=JSON.parse($('ioText').value);
+    if(!t || !Array.isArray(t.stops)) throw 0;
+    trip=t; visited=new Set(); syncTripFields(); afterChange();
+    $('ioArea').classList.remove('on');
+  }catch(e){ alert('That doesn\'t look like exported trip data. Paste the full text from Export.'); }
+});
+
+function syncTripFields(){ $('tripTitle').value=trip.title||''; $('tripSub').value=trip.sub||''; $('tripLayout').value=trip.layout||'auto'; }
+function afterChange(){ render(); saveTrip(); }
+
+/* mode toggle */
+$('btnMode').addEventListener('click', ()=>{
+  const ed=$('editor');
+  const on=!ed.classList.contains('on');
+  ed.classList.toggle('on',on);
+  $('btnMode').textContent = on ? '✓ Done' : '✎ Edit trip';
+  $('btnMode').classList.toggle('editing',on);
+  if(on) syncTripFields();
+});
+
+/* ================= sheet ================= */
+function openSheet(i){
+  current=i;
+  const s=trip.stops[i];
+  (window._hits||[]).forEach(h=>h.classList.remove('active'));
+  if(window._hits && window._hits[i]) window._hits[i].classList.add('active');
+  $('sheetTitle').textContent=s.name;
+  $('sheetTime').textContent=s.time||'';
+  $('sheetDist').textContent=s.dist||'';
+  $('sheetNote').textContent=s.note||'';
+  $('sheetTip').textContent=s.tip ? 'Tip: '+s.tip : '';
+  $('sheetBadge').textContent=badgeChar(i, trip.stops.length, s.kind);
+  $('sheetBadge').style.background=KIND_COLOR[s.kind]||KIND_COLOR.stop;
+  refreshVisitBtn();
+  $('sheet').classList.add('open'); $('scrim').classList.add('on');
+}
+function closeSheet(){
+  $('sheet').classList.remove('open'); $('scrim').classList.remove('on');
+  (window._hits||[]).forEach(h=>h.classList.remove('active'));
+  current=-1;
+}
+function refreshVisitBtn(){
+  const done=visited.has(current);
+  $('btnVisit').textContent = done ? '✓ Reached' : 'Mark as reached';
+  $('btnVisit').classList.toggle('done',done);
+}
+$('btnVisit').addEventListener('click', ()=>{
+  if(current<0)return;
+  visited.has(current)?visited.delete(current):visited.add(current);
+  refreshVisitBtn(); render(); openHighlight(current);
+});
+function openHighlight(i){ if(window._hits && window._hits[i]) window._hits[i].classList.add('active'); }
+$('btnClose').addEventListener('click',closeSheet);
+$('scrim').addEventListener('click',closeSheet);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
+
+function paintProgress(){
+  const n=visited.size, t=trip.stops.length;
+  $('progLabel').textContent=`${n} of ${t}`;
+  $('progFill').style.width=(t? n/t*100:0)+'%';
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ================= boot ================= */
+(async ()=>{
+  await loadTrip();
+  syncTripFields();
+  render();
+})();
+</script>
+</body>
+</html>
