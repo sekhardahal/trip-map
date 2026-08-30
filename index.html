@@ -123,6 +123,11 @@
   .io-area.on{display:block}
   .io-area textarea{min-height:90px;font-size:11.5px;font-family:monospace}
   .io-note{font-size:11.5px;color:var(--ink-soft);margin-top:6px;line-height:1.45}
+  .sug-wrap{position:relative}
+  .sug-box{display:none;position:absolute;left:0;right:0;top:100%;z-index:50;background:#fff;border:1.5px solid var(--border-line);border-radius:0 0 10px 10px;box-shadow:0 8px 20px rgba(34,48,74,.15);max-height:220px;overflow:auto}
+  .sug-box.on{display:block}
+  .sug-item{display:block;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid var(--paper-deep);padding:10px 12px;font-size:13.5px;cursor:pointer;color:var(--ink);font-family:inherit}
+  .sug-item:hover,.sug-item:active{background:var(--paper-deep)}
   .save-note{font-size:11px;color:var(--park);font-weight:700;margin-top:8px;display:none}
   .save-note.on{display:block}
 
@@ -205,7 +210,11 @@
     <div class="ed-card">
       <h3>Add a stop</h3>
       <label for="fName">Name *</label>
-      <input type="text" id="fName" placeholder="e.g. Helena — Great Northern Carousel">
+      <div class="sug-wrap">
+        <input type="text" id="fName" placeholder="Start typing a place… e.g. Helena" autocomplete="off">
+        <div class="sug-box" id="sugBox"></div>
+      </div>
+      <div class="io-note">Pick a suggestion to auto-fill coordinates (search needs internet — the map itself stays offline). Search by Photon / OpenStreetMap.</div>
       <div class="row2">
         <div>
           <label for="fTime">Arrival time</label>
@@ -221,8 +230,8 @@
           </select>
         </div>
       </div>
-      <label for="fDist">Distance / leg label</label>
-      <input type="text" id="fDist" placeholder="e.g. 145 km from Great Falls">
+      <label for="fDist">Distance / leg label (optional)</label>
+      <input type="text" id="fDist" placeholder="Leave blank to auto-calculate from coordinates">
       <div class="row2">
         <div>
           <label for="fLat">Latitude (optional)</label>
@@ -353,6 +362,21 @@ let current = -1;     // sheet
 const KIND_COLOR = {origin:'#22304A', border:'#E0A526', stop:'#C43B2E', dest:'#4A7C59'};
 const $ = id => document.getElementById(id);
 
+/* ---- auto distance (straight line × road factor, shown as ~estimate) ---- */
+const hasCoordG = s => s && typeof s.lat==='number' && typeof s.lon==='number' && isFinite(s.lat) && isFinite(s.lon);
+function havKm(a,b){
+  const R=6371, toR=x=>x*Math.PI/180;
+  const dLat=toR(b.lat-a.lat), dLon=toR(b.lon-a.lon);
+  const h=Math.sin(dLat/2)**2 + Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function autoDistText(i){
+  const s=trip.stops[i], p=trip.stops[i-1];
+  if(!s || !p || !hasCoordG(s) || !hasCoordG(p)) return '';
+  const km=Math.round(havKm(p,s)*1.22/5)*5;
+  return km ? '~'+km+' km from '+p.name.split('—')[0].split(',')[0].trim() : '';
+}
+
 /* ================= persistence (best-effort) ================= */
 function flashSaved(){
   const n = $('saveNote'); n.classList.add('on');
@@ -480,7 +504,7 @@ function render(){
 
   /* leg labels between stops (uses each stop's dist text, shortened) */
   for(let i=1;i<P.length;i++){
-    const dtxt = (stops[i].dist||'').split(' from')[0].trim();
+    const dtxt = ((stops[i].dist || autoDistText(i))||'').split(' from')[0].trim();
     if(!dtxt || dtxt.length>18) continue;
     const a=P[i-1], b=P[i];
     const x=(a.x+b.x)/2, y=(a.y+b.y)/2;
@@ -636,7 +660,7 @@ function openSheet(i){
   if(window._hits && window._hits[i]) window._hits[i].classList.add('active');
   $('sheetTitle').textContent=s.name;
   $('sheetTime').textContent=s.time||'';
-  $('sheetDist').textContent=s.dist||'';
+  $('sheetDist').textContent = s.dist || autoDistText(i);
   $('sheetNote').textContent=s.note||'';
   $('sheetTip').textContent=s.tip ? 'Tip: '+s.tip : '';
   $('sheetBadge').textContent=badgeChar(i, trip.stops.length, s.kind);
@@ -670,6 +694,53 @@ function paintProgress(){
   $('progFill').style.width=(t? n/t*100:0)+'%';
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+
+/* ---- place search: suggestions while typing (internet needed for search only) ---- */
+let sugTimer=null;
+const sugBox=$('sugBox');
+$('fName').addEventListener('input', ()=>{
+  clearTimeout(sugTimer);
+  const q=$('fName').value.trim();
+  if(q.length<3){ hideSug(); return; }
+  sugTimer=setTimeout(()=>fetchSug(q), 350);
+});
+async function fetchSug(q){
+  try{
+    const r=await fetch('https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&limit=5');
+    if(!r.ok) throw 0;
+    const d=await r.json();
+    const seen=new Set();
+    showSug((d.features||[]).map(f=>{
+      const p=f.properties||{}, c=(f.geometry||{}).coordinates||[];
+      const parts=[p.name,p.city,p.state,p.country].filter(Boolean);
+      const label=[...new Set(parts)].join(', ');
+      return {label, lat:+c[1], lon:+c[0]};
+    }).filter(x=>{
+      if(!x.label || !isFinite(x.lat) || seen.has(x.label)) return false;
+      seen.add(x.label); return true;
+    }));
+  }catch(e){ hideSug(); } /* offline or blocked — manual entry still works */
+}
+function showSug(list){
+  if(!list.length){ hideSug(); return; }
+  sugBox.innerHTML='';
+  list.forEach(it=>{
+    const b=document.createElement('button');
+    b.type='button'; b.className='sug-item'; b.textContent=it.label;
+    b.addEventListener('click',()=>{
+      const short=it.label.split(', ');
+      $('fName').value = short.slice(0, short.length>2?2:short.length).join(', ');
+      $('fLat').value=it.lat.toFixed(4);
+      $('fLon').value=it.lon.toFixed(4);
+      hideSug();
+    });
+    sugBox.appendChild(b);
+  });
+  sugBox.classList.add('on');
+}
+function hideSug(){ sugBox.classList.remove('on'); sugBox.innerHTML=''; }
+document.addEventListener('click', e=>{ if(!e.target.closest('.sug-wrap')) hideSug(); });
 
 /* ================= boot ================= */
 (async ()=>{
