@@ -40,9 +40,9 @@
     background:repeating-linear-gradient(90deg, var(--gold) 0 28px, transparent 28px 44px);
   }
   .hdr-top{display:flex;align-items:center;gap:14px}
-  .shield{flex:0 0 auto}
+  .shield{flex:0 0 48px;width:48px;height:48px}
   .eyebrow{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--gold);margin-bottom:4px;font-weight:600}
-  h1{font-family:Georgia,"Times New Roman",serif;font-size:22px;line-height:1.15;font-weight:700;word-break:break-word}
+  h1{font-family:Georgia,"Times New Roman",serif;font-size:22px;line-height:1.15;font-weight:700;overflow-wrap:break-word;word-break:normal}
   .hdr-sub{margin-top:8px;font-size:12.5px;color:#B9C4DA}
 
   /* ---------- Toolbar ---------- */
@@ -63,9 +63,10 @@
 
   /* ---------- Map ---------- */
   .mapbox{padding:8px 6px 0;position:relative}
-  svg{display:block;width:100%;height:auto}
+  #map{display:block;width:100%;height:auto}
   .compass{position:absolute;top:20px;right:18px;font-size:10px;letter-spacing:.2em;color:var(--ink-soft);text-align:center;font-weight:700}
-  .compass .arrow{font-size:18px;display:block;line-height:1}
+  .compass{display:flex;align-items:center;gap:4px}
+  .compass .arrow{font-size:16px;line-height:1}
   .stop-hit{cursor:pointer}
   .stop-hit circle.ring{transition:r .2s ease, stroke-width .2s ease}
   .stop-hit.active circle.ring{stroke-width:3}
@@ -170,7 +171,7 @@
         <path d="M12 34 L88 34 L88 60 L12 60 Z" fill="#0F1E3D"/>
         <text x="50" y="56" text-anchor="middle" fill="#fff" font-size="24" font-weight="bold" font-family="Arial">MAP</text>
       </svg>
-      <div style="min-width:0">
+      <div style="flex:1 1 0;min-width:0">
         <div class="eyebrow">Strip Map · Builder</div>
         <h1 id="hdrTitle">My Road Trip</h1>
       </div>
@@ -266,7 +267,7 @@
 
   <!-- ================= MAP ================= -->
   <div class="mapbox" id="mapbox">
-    <div class="compass"><span class="arrow">↑</span>Start</div>
+    <div class="compass"><span class="arrow">↑</span> Start</div>
     <svg id="map" role="img" aria-label="Route strip map"></svg>
   </div>
   <div class="empty" id="empty" style="display:none">
@@ -304,13 +305,22 @@
 <script>
 /* ================= state ================= */
 const DEFAULT_TRIP = {
-  title:"Sample: Lethbridge → Idaho Falls",
+  title:"Sample: Edmonton → Idaho Falls",
   layout:"geo",
-  sub:"Sat, Sept 5 · 6:00 AM depart · ~740 km · 7½ hrs",
+  sub:"Sept 4–5 · ~1,250 km · overnight in Lethbridge",
   stops:[
-    {name:"Lethbridge, AB", kind:"origin", lat:49.694, lon:-112.833, time:"6:00 AM", dist:"Departure",
-     note:"Overnight base. Roll out at 6 AM — it's dark until about 6:50, and Highway 4 to Coutts is open prairie.",
-     tip:"Watch for deer in the low light on Hwy 4. Coffee up — first stop is almost 2 hours away."},
+    {name:"Edmonton, AB", kind:"origin", lat:53.546, lon:-113.494, time:"Sept 4 · depart", dist:"Departure",
+     note:"Day 1: head south on the QE2 toward Lethbridge — about 510 km, roughly 5 hours of driving plus breaks.",
+     tip:"Leaving after lunch still gets you to Lethbridge for dinner. Load the snacks before you hit Gateway Blvd."},
+    {name:"Red Deer, AB — Gasoline Alley", kind:"stop", lat:52.230, lon:-113.808, time:"Sept 4", dist:"150 km from Edmonton",
+     note:"Classic halfway-ish break on the QE2 — fuel, food courts, bathrooms, and room to stretch little legs.",
+     tip:"Donut Mill's giant donuts are a reliable kid-morale boost."},
+    {name:"Calgary, AB", kind:"stop", lat:51.045, lon:-114.057, time:"Sept 4", dist:"145 km from Red Deer",
+     note:"Optional stop — Stoney Trail ring road skirts the city if you'd rather keep rolling. If you stop, Deerfoot Meadows or a park just off the highway works well.",
+     tip:"Hitting Calgary 4–6 PM on a Friday means rush hour — take the ring road or time around it."},
+    {name:"Lethbridge, AB", kind:"stop", lat:49.694, lon:-112.833, time:"Sept 4 · overnight", dist:"215 km from Calgary",
+     note:"Overnight base. Day 2 rolls out at 6 AM — it's dark until about 6:50, and Highway 4 to Coutts is open prairie.",
+     tip:"Watch for deer in the low light on Hwy 4. Coffee up — first Day-2 stop is almost 2 hours away."},
     {name:"Coutts / Sweet Grass Border", kind:"border", lat:49.001, lon:-111.958, time:"7:15 AM", dist:"105 km from Lethbridge",
      note:"24-hour crossing. Early Saturday morning should mean little to no wait.",
      tip:"Passports out and ready. If travelling with kids without both parents, carry a consent letter."},
